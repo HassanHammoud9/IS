@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, createContext, useContext } from "react";
 import axios from "axios";
 import {
   Container,
@@ -17,9 +17,9 @@ import {
   Grid,
   Typography,
 } from "@mui/material";
-import { Add, Delete, Search } from "@mui/icons-material";
+import { Add, Delete, Search, Edit } from "@mui/icons-material";
 
-// ✅ AI logic: guess status based on name + quantity
+//  AI logic: guess status based on name + quantity
 const getAISuggestedStatus = (name, quantity) => {
   if (!name && !quantity) return "IN_STOCK";
   const lowerName = name.toLowerCase();
@@ -32,6 +32,23 @@ const getAISuggestedStatus = (name, quantity) => {
   return "IN_STOCK";
 };
 
+// Role Context for RBAC
+const RoleContext = createContext();
+
+function useRole() {
+  return useContext(RoleContext);
+}
+
+function RoleProvider({ children }) {
+  const [role, setRole] = useState(() => localStorage.getItem('role') || 'admin');
+  useEffect(() => { localStorage.setItem('role', role); }, [role]);
+  return (
+    <RoleContext.Provider value={{ role, setRole }}>
+      {children}
+    </RoleContext.Provider>
+  );
+}
+
 function App() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({
@@ -42,6 +59,9 @@ function App() {
     status: "IN_STOCK",
   });
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const { role, setRole } = useRole();
 
   const baseUrl = "http://localhost:8080/api/items";
 
@@ -81,6 +101,27 @@ function App() {
     fetchItems();
   };
 
+  const handleEditOpen = (item) => {
+    setEditItem(item);
+    setEditOpen(true);
+  };
+
+  const handleEditClose = () => {
+    setEditOpen(false);
+    setEditItem(null);
+  };
+
+  const handleEditChange = (e) => {
+    setEditItem({ ...editItem, [e.target.name]: e.target.value });
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    await axios.put(`${baseUrl}/${editItem.id}`, editItem);
+    fetchItems();
+    handleEditClose();
+  };
+
   const handleSearch = async () => {
     const res = await axios.get(`${baseUrl}/search?keyword=${searchKeyword}`);
     setItems(res.data);
@@ -88,11 +129,40 @@ function App() {
 
   return (
     <Container maxWidth="md" sx={{ paddingTop: 4 }}>
-      <Typography variant="h4" gutterBottom align="center">
-        📦 <strong>Inventory Manager</strong>
-      </Typography>
+      {/* RBAC: Role dropdown and badge at top */}
+      <Grid container alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Grid item>
+          <Typography variant="h4" gutterBottom align="left">
+            📦 <strong>Inventory Manager</strong>
+          </Typography>
+        </Grid>
+        <Grid item>
+          <Select
+            value={role}
+            onChange={e => setRole(e.target.value)}
+            size="small"
+            sx={{ mr: 2, minWidth: 100 }}
+          >
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="viewer">Viewer</MenuItem>
+          </Select>
+          <span style={{
+            display: 'inline-block',
+            background: role === 'admin' ? '#1976d2' : '#888',
+            color: '#fff',
+            borderRadius: 12,
+            padding: '2px 12px',
+            fontSize: 13,
+            fontWeight: 500,
+            verticalAlign: 'middle',
+            marginLeft: 4
+          }}>
+            {role.charAt(0).toUpperCase() + role.slice(1)}
+          </span>
+        </Grid>
+      </Grid>
 
-      <form onSubmit={handleSubmit} style={{ marginBottom: "30px" }}>
+      <form onSubmit={role === 'admin' ? handleSubmit : e => e.preventDefault()} style={{ marginBottom: "30px" }}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={4}>
             <TextField
@@ -104,6 +174,7 @@ function App() {
               value={form.name}
               onChange={handleChange}
               required
+              disabled={role !== 'admin'}
             />
           </Grid>
           <Grid item xs={12} sm={4}>
@@ -117,6 +188,7 @@ function App() {
               value={form.quantity}
               onChange={handleChange}
               required
+              disabled={role !== 'admin'}
             />
           </Grid>
           <Grid item xs={12} sm={4}>
@@ -129,6 +201,7 @@ function App() {
               value={form.category}
               onChange={handleChange}
               required
+              disabled={role !== 'admin'}
             />
           </Grid>
           <Grid item xs={12} sm={8}>
@@ -140,40 +213,43 @@ function App() {
               label="Description"
               value={form.description}
               onChange={handleChange}
+              disabled={role !== 'admin'}
             />
           </Grid>
           <Grid item xs={12} sm={4}>
-            <FormControl fullWidth size="small" variant="standard">
-              <InputLabel>Status</InputLabel>
-              <Select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+              <FormControl fullWidth size="small" variant="standard">
+                <InputLabel>Status</InputLabel>
+                <Select
+                  name="status"
+                  value={form.status}
+                  onChange={handleChange}
+                  disabled={role !== 'admin'}
+                >
+                  <MenuItem value="IN_STOCK">In Stock</MenuItem>
+                  <MenuItem value="LOW_STOCK">Low Stock</MenuItem>
+                  <MenuItem value="ORDERED">Ordered</MenuItem>
+                  <MenuItem value="DISCONTINUED">Discontinued</MenuItem>
+                </Select>
+                {/* AI Hint */}
+                <Typography
+                  variant="caption"
+                  sx={{ color: "gray", marginTop: "4px", fontStyle: "italic" }}
+                >
+                  💡 AI-Suggested based on name & quantity
+                </Typography>
+              </FormControl>
+              <Button
+                variant="contained"
+                color="primary"
+                type="submit"
+                startIcon={<Add fontSize="small" />}
+                sx={{ minWidth: 80, minHeight: 28, fontSize: 13, padding: '2px 8px', alignSelf: 'flex-end', boxShadow: 1 }}
+                disabled={role !== 'admin'}
               >
-                <MenuItem value="IN_STOCK">In Stock</MenuItem>
-                <MenuItem value="LOW_STOCK">Low Stock</MenuItem>
-                <MenuItem value="ORDERED">Ordered</MenuItem>
-                <MenuItem value="DISCONTINUED">Discontinued</MenuItem>
-              </Select>
-              {/* AI Hint */}
-              <Typography
-                variant="caption"
-                sx={{ color: "gray", marginTop: "4px", fontStyle: "italic" }}
-              >
-                💡 AI-Suggested based on name & quantity
-              </Typography>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12}>
-            <Button
-              variant="contained"
-              color="primary"
-              type="submit"
-              startIcon={<Add fontSize="small" />}
-              fullWidth
-            >
-              Add Item
-            </Button>
+                Add
+              </Button>
+            </div>
           </Grid>
         </Grid>
       </form>
@@ -222,9 +298,19 @@ function App() {
               <TableCell>{item.status}</TableCell>
               <TableCell>
                 <IconButton
+                  color="primary"
+                  size="small"
+                  onClick={() => handleEditOpen(item)}
+                  sx={{ mr: 1 }}
+                  disabled={role !== 'admin'}
+                >
+                  <Edit fontSize="small" />
+                </IconButton>
+                <IconButton
                   color="error"
                   size="small"
                   onClick={() => handleDelete(item.id)}
+                  disabled={role !== 'admin'}
                 >
                   <Delete fontSize="small" />
                 </IconButton>
@@ -233,8 +319,103 @@ function App() {
           ))}
         </TableBody>
       </Table>
+
+      {/* Edit Dialog */}
+      {editOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <form
+            onSubmit={role === 'admin' ? handleEditSubmit : e => e.preventDefault()}
+            style={{ background: '#fff', padding: 24, borderRadius: 8, minWidth: 320, boxShadow: '0 2px 16px rgba(0,0,0,0.15)' }}
+          >
+            <Typography variant="h6" gutterBottom>Edit Item</Typography>
+            <TextField
+              fullWidth
+              margin="dense"
+              name="name"
+              label="Name"
+              value={editItem.name}
+              onChange={handleEditChange}
+              required
+              disabled={role !== 'admin'}
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              name="quantity"
+              label="Quantity"
+              type="number"
+              value={editItem.quantity}
+              onChange={handleEditChange}
+              required
+              disabled={role !== 'admin'}
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              name="category"
+              label="Category"
+              value={editItem.category}
+              onChange={handleEditChange}
+              required
+              disabled={role !== 'admin'}
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              name="description"
+              label="Description"
+              value={editItem.description}
+              onChange={handleEditChange}
+              disabled={role !== 'admin'}
+            />
+            <FormControl fullWidth margin="dense">
+              <InputLabel>Status</InputLabel>
+              <Select
+                name="status"
+                value={editItem.status}
+                label="Status"
+                onChange={handleEditChange}
+                MenuProps={{ disablePortal: true }}
+                disabled={role !== 'admin'}
+              >
+                <MenuItem value="IN_STOCK">In Stock</MenuItem>
+                <MenuItem value="LOW_STOCK">Low Stock</MenuItem>
+                <MenuItem value="ORDERED">Ordered</MenuItem>
+                <MenuItem value="DISCONTINUED">Discontinued</MenuItem>
+              </Select>
+            </FormControl>
+            <Grid container spacing={2} sx={{ mt: 2 }}>
+              <Grid item xs={6}>
+                <Button variant="contained" color="primary" type="submit" fullWidth disabled={role !== 'admin'}>Save</Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button variant="outlined" color="secondary" onClick={handleEditClose} fullWidth>Cancel</Button>
+              </Grid>
+            </Grid>
+          </form>
+        </div>
+      )}
     </Container>
   );
 }
 
-export default App;
+export default function AppWithRoleProvider() {
+  return (
+    <RoleProvider>
+      <App />
+    </RoleProvider>
+  );
+}
