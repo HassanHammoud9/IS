@@ -1,3 +1,4 @@
+# IS
 ## 📦 Inventory Manager Frontend
 
 Welcome to the Inventory Manager! This is a modern React web application for managing inventory items with a clean, professional UI and smart AI-powered status suggestions.
