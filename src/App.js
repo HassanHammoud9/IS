@@ -217,7 +217,7 @@ function App() {
             />
           </Grid>
           <Grid item xs={12} sm={4}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <FormControl fullWidth size="small" variant="standard">
                 <InputLabel>Status</InputLabel>
                 <Select
@@ -244,7 +244,7 @@ function App() {
                 color="primary"
                 type="submit"
                 startIcon={<Add fontSize="small" />}
-                sx={{ minWidth: 80, minHeight: 28, fontSize: 13, padding: '2px 8px', alignSelf: 'flex-end', boxShadow: 1 }}
+                sx={{ minWidth: 80, minHeight: 28, fontSize: 13, padding: '2px 8px', boxShadow: 1, marginBottom: '0px' }}
                 disabled={role !== 'admin'}
               >
                 Add
