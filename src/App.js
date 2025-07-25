@@ -32,6 +32,12 @@ const getAISuggestedStatus = (name, quantity) => {
   return "IN_STOCK";
 };
 
+// Smart AI Description Generator
+function generateSmartDescription(name, category) {
+  if (!name && !category) return '';
+  return `This is a high-quality ${name || 'item'} item categorized under ${category || 'General'}. Perfect for modern inventory needs.`;
+}
+
 // Role Context for RBAC
 const RoleContext = createContext();
 
@@ -58,6 +64,7 @@ function App() {
     description: "",
     status: "IN_STOCK",
   });
+  const [errors, setErrors] = useState({ name: '', quantity: '' });
   const [searchKeyword, setSearchKeyword] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -76,16 +83,40 @@ function App() {
 
   // ✅ Whenever name or quantity changes, auto-update status using AI
   const handleChange = (e) => {
-    const updatedForm = { ...form, [e.target.name]: e.target.value };
-
-    if (e.target.name === "name" || e.target.name === "quantity") {
+    const { name, value } = e.target;
+    let valid = true;
+    let errorMsg = '';
+    if (name === 'name') {
+      if (!/^[a-zA-Z ]*$/.test(value)) {
+        valid = false;
+        errorMsg = 'Only letters and spaces allowed.';
+      }
+    }
+    if (name === 'quantity') {
+      if (!/^\d*$/.test(value)) { // eslint-disable-line no-useless-escape
+        valid = false;
+        errorMsg = 'Only numbers allowed.';
+      }
+    }
+    setErrors((prev) => ({ ...prev, [name]: valid ? '' : errorMsg }));
+    if (!valid) return;
+    let updatedForm = { ...form, [name]: name === 'quantity' ? value.replace(/\D/g, '') : value };
+    // AI status suggestion
+    if (name === "name" || name === "quantity") {
       const aiStatus = getAISuggestedStatus(
-        e.target.name === "name" ? e.target.value : updatedForm.name,
-        e.target.name === "quantity" ? parseInt(e.target.value) : updatedForm.quantity
+        name === "name" ? value : updatedForm.name,
+        name === "quantity" ? parseInt(value) : updatedForm.quantity
       );
       updatedForm.status = aiStatus;
     }
-
+    // Smart AI description generator (add mode)
+    if ((name === 'name' || name === 'category') && !updatedForm.description) {
+      const desc = generateSmartDescription(
+        name === 'name' ? value : updatedForm.name,
+        name === 'category' ? value : updatedForm.category
+      );
+      updatedForm.description = desc;
+    }
     setForm(updatedForm);
   };
 
@@ -112,7 +143,17 @@ function App() {
   };
 
   const handleEditChange = (e) => {
-    setEditItem({ ...editItem, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    let updatedEdit = { ...editItem, [name]: value };
+    // Smart AI description generator (edit mode)
+    if ((name === 'name' || name === 'category') && !updatedEdit.description) {
+      const desc = generateSmartDescription(
+        name === 'name' ? value : updatedEdit.name,
+        name === 'category' ? value : updatedEdit.category
+      );
+      updatedEdit.description = desc;
+    }
+    setEditItem(updatedEdit);
   };
 
   const handleEditSubmit = async (e) => {
@@ -175,6 +216,9 @@ function App() {
               onChange={handleChange}
               required
               disabled={role !== 'admin'}
+              error={!!errors.name}
+              helperText={errors.name}
+              inputProps={{ pattern: '[a-zA-Z ]*' }}
             />
           </Grid>
           <Grid item xs={12} sm={4}>
@@ -184,11 +228,14 @@ function App() {
               variant="standard"
               name="quantity"
               label="Quantity"
-              type="number"
+              type="text"
               value={form.quantity}
               onChange={handleChange}
               required
               disabled={role !== 'admin'}
+              error={!!errors.quantity}
+              helperText={errors.quantity}
+              inputProps={{ inputMode: 'numeric', pattern: '\\d*' }}
             />
           </Grid>
           <Grid item xs={12} sm={4}>
@@ -215,6 +262,12 @@ function App() {
               onChange={handleChange}
               disabled={role !== 'admin'}
             />
+            {/* AI autofill hint */}
+            {!form.description && (form.name || form.category) && (
+              <Typography variant="caption" sx={{ color: 'gray', fontStyle: 'italic', ml: 1 }}>
+                💡 Auto-filled by AI
+              </Typography>
+            )}
           </Grid>
           <Grid item xs={12} sm={4}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -381,6 +434,12 @@ function App() {
               onChange={handleEditChange}
               disabled={role !== 'admin'}
             />
+            {/* AI autofill hint for edit */}
+            {!editItem.description && (editItem.name || editItem.category) && (
+              <Typography variant="caption" sx={{ color: 'gray', fontStyle: 'italic', ml: 1 }}>
+                💡 Auto-filled by AI
+              </Typography>
+            )}
             <FormControl fullWidth margin="dense">
               <InputLabel>Status</InputLabel>
               <Select
