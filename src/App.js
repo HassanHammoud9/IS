@@ -32,10 +32,37 @@ const getAISuggestedStatus = (name, quantity) => {
   return "IN_STOCK";
 };
 
-// Smart AI Description Generator
-function generateSmartDescription(name, category) {
-  if (!name && !category) return '';
-  return `This is a high-quality ${name || 'item'} item categorized under ${category || 'General'}. Perfect for modern inventory needs.`;
+// Smart AI Description Generator using OpenAI API (gpt-4)
+async function fetchAIDescription(name, category) {
+  const prompt = `Write a short, smart, modern description for an inventory item named '${name}' in the '${category}' category. Keep it under 20 words.`;
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.REACT_APP_OPENAI_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 60,
+      }),
+    });
+    const data = await response.json();
+    // Remove leading/trailing quotes if present
+    let desc = data.choices?.[0]?.message?.content || '';
+    if (desc.startsWith('"') && desc.endsWith('"')) {
+      desc = desc.slice(1, -1);
+    }
+    if (desc.startsWith("'") && desc.endsWith("'")) {
+      desc = desc.slice(1, -1);
+    }
+    return desc;
+  } catch (err) {
+    console.error("OpenAI fetch error:", err);
+    return `Smart description for ${name} in ${category}`; // fallback
+  }
 }
 
 // Role Context for RBAC
@@ -81,7 +108,7 @@ function App() {
     setItems(res.data);
   };
 
-  // ✅ Whenever name or quantity changes, auto-update status using AI
+  // Only update status and validation on change; AI description is handled on submit
   const handleChange = (e) => {
     const { name, value } = e.target;
     let valid = true;
@@ -109,20 +136,23 @@ function App() {
       );
       updatedForm.status = aiStatus;
     }
-    // Smart AI description generator (add mode)
-    if ((name === 'name' || name === 'category') && !updatedForm.description) {
-      const desc = generateSmartDescription(
-        name === 'name' ? value : updatedForm.name,
-        name === 'category' ? value : updatedForm.category
-      );
-      updatedForm.description = desc;
-    }
     setForm(updatedForm);
   };
 
+  // Handle form submit for adding new item
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await axios.post(baseUrl, form);
+    // Validate before submit
+    if (!form.name || !form.category || errors.name || errors.quantity) return;
+    let submitForm = { ...form };
+    // If description is empty, fill it with AI
+    if (!submitForm.description) {
+      submitForm.description = await fetchAIDescription(submitForm.name, submitForm.category);
+    }
+    await axios.post(baseUrl, {
+      ...submitForm,
+      quantity: parseInt(submitForm.quantity, 10)
+    });
     fetchItems();
     setForm({ name: "", quantity: 0, category: "", description: "", status: "IN_STOCK" });
   };
@@ -142,23 +172,22 @@ function App() {
     setEditItem(null);
   };
 
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    let updatedEdit = { ...editItem, [name]: value };
-    // Smart AI description generator (edit mode)
-    if ((name === 'name' || name === 'category') && !updatedEdit.description) {
-      const desc = generateSmartDescription(
-        name === 'name' ? value : updatedEdit.name,
-        name === 'category' ? value : updatedEdit.category
-      );
-      updatedEdit.description = desc;
-    }
-    setEditItem(updatedEdit);
-  };
+// Handle field changes in edit dialog (edit mode)
+const handleEditChange = (e) => {
+  const { name, value } = e.target;
+  let updatedEdit = { ...editItem, [name]: value };
+  setEditItem(updatedEdit);
+};
+
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
-    await axios.put(`${baseUrl}/${editItem.id}`, editItem);
+    let submitEdit = { ...editItem };
+    // If description is empty, fill it with AI
+    if (!submitEdit.description) {
+      submitEdit.description = await fetchAIDescription(submitEdit.name, submitEdit.category);
+    }
+    await axios.put(`${baseUrl}/${editItem.id}`, submitEdit);
     fetchItems();
     handleEditClose();
   };
